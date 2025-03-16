@@ -19,7 +19,6 @@ tickers_per_sector = {
     .tolist()
     for sector in sectors
 }
-daily_returns = np.log(totalData["Close"].diff().shift(-1))
 
 LARGEST_WINDOW_SIZE = 100
 MAX_DATE = 500
