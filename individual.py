@@ -1,5 +1,6 @@
 import numpy as np
 from numpy.random import choice
+from pandas.core.frame import find_common_type
 import process_stocks
 from tqdm import tqdm
 import pandas as pd
@@ -7,29 +8,64 @@ import random
 
 
 class Individual:
-    def __init__(self, num_sectors, sector_weights, root):
+    def __init__(self, num_sectors, sector_weights, root, stock_weights: dict):
         self.sector_weights = sector_weights
         self.num_sectors = num_sectors
         self.chosen_sectors = choice(
             process_stocks.sectors.tolist(),
             num_sectors,
-            # p=sector_weights,
+            p=sector_weights,
             replace=False,
         )
+        self.stock_weights = stock_weights
         self.profit = 0
         self.root = root
+        self.fitness = 0
+        self.tree_size = 0
+        self.find_tree_size(self.root)
+
+    def find_tree_size(self, curr_node):
+        self.tree_size += 1
+        if curr_node == None or isinstance(curr_node, float):
+            self.tree_size -= 1
+            return
+        elif isinstance(curr_node, EndNode):
+            return
+        else:
+            self.find_tree_size(curr_node.left)
+            self.find_tree_size(curr_node.right)
 
     def pick_stocks(self):
+        stocks_list = []
         for sector in self.chosen_sectors:
-            # just pick stock with best performance
-            best_stock = None
-            best_stock_perf = 0
-            for stock in process_stocks.tickers_per_sector[sector]:
-                stock_perf = self.evaluate_return(stock)
-                if best_stock is None or stock_perf > best_stock_perf:
-                    best_stock = stock
-                    best_stock_perf = stock_perf
-            print(f"best stock: {best_stock} | perf: {best_stock_perf}")
+            available_stocks = process_stocks.tickers_per_sector[sector]
+            stock_weights = np.array(
+                [self.stock_weights[stock] for stock in available_stocks]
+            )
+            stock_weights = stock_weights / (stock_weights).sum()
+            stocks = choice(
+                available_stocks,
+                3,
+                p=stock_weights,
+                replace=True,
+            )
+            stocks_list.extend(stocks)
+        return stocks_list
+
+    def evaluate_fitness(self):
+        stocks = self.pick_stocks()
+        stock_perfs = []
+        for stock in stocks:
+            stock_perf = self.evaluate_return(stock)
+            if stock_perf == 100:
+                self.stock_weights[stock] /= 1.5
+                stock_perfs.append(0.1)
+            else:
+                stock_perfs.append(stock_perf)
+                self.stock_weights[stock] *= 2
+        fitness = np.array(stock_perfs).mean()
+        self.fitness = fitness
+        return fitness
 
     def evaluate_return(self, ticker):
         daily_returns = (
@@ -46,6 +82,8 @@ class Individual:
             process_stocks.LARGEST_WINDOW_SIZE : process_stocks.MAX_DATE
         ]
         strategy_returns = np.multiply(signals, daily_returns)
+        if np.absolute(strategy_returns[strategy_returns < 0]).sum() == 0:
+            return 100
         return (
             strategy_returns[strategy_returns > 0].sum()
             / np.absolute(strategy_returns[strategy_returns < 0]).sum()
@@ -201,6 +239,6 @@ if __name__ == "__main__":
     node2 = EndNode(50, EndNode.CLOSE)
     nodeComp1 = EvaluationNode(EvaluationNode.AVERAGE, node1)
     nodeComp2 = EvaluationNode(EvaluationNode.AVERAGE, node2)
-    root = BooleanNode(BooleanNode.GREATER_THAN, nodeComp2, nodeComp1)
-    ind = Individual(2, [], root)
+    root = EvaluationNode(EvaluationNode.GREATER_THAN, nodeComp2, nodeComp1)
+    ind = Individual(2, [], root, {})
     print(ind.evaluate_return("AAPL"))
