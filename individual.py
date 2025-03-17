@@ -3,7 +3,6 @@ from numpy.random import choice
 from pandas.core.frame import find_common_type
 import process_stocks
 from tqdm import tqdm
-from treelib import Node, Tree
 import pandas as pd
 import random
 
@@ -91,8 +90,6 @@ class Individual:
             )[process_stocks.LARGEST_WINDOW_SIZE : -process_stocks.MAX_DATE]
             signals = self.get_signal(ticker)[process_stocks.LARGEST_WINDOW_SIZE :]
         else:
-            # TODO: add window size stuff to out of sample data gathering in end node
-            print("out of sample")
             daily_returns = (
                 np.log(
                     process_stocks.totalData.loc[
@@ -107,7 +104,7 @@ class Individual:
         strategy_returns = np.multiply(signals, daily_returns)
         if np.absolute(strategy_returns[strategy_returns < 0]).sum() == 0:
             return 100
-        self.cum_profit = strategy_returns.cumsum()
+        self.cum_profit = pd.DataFrame(strategy_returns).cumsum()
         return (
             strategy_returns[strategy_returns > 0].sum()
             / np.absolute(strategy_returns[strategy_returns < 0]).sum()

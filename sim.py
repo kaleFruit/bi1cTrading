@@ -1,4 +1,6 @@
+from time import perf_counter
 import pandas as pd
+import matplotlib.pyplot as plt
 import itertools
 from tqdm import tqdm
 from numpy.random import choice
@@ -10,14 +12,15 @@ import random
 
 
 class Population:
-    POPULATION_SIZE = 4  # even number cuase lazy parent strategy
-    NUM_GENS = 1
+    POPULATION_SIZE = 10  # even number cuase lazy parent strategy
+    NUM_GENS = 6
     NUM_SECTORS = 3
 
     def __init__(self):
         self.population = [
             self.gen_init_dividual() for _ in range(Population.POPULATION_SIZE)
         ]
+        self.training_time = 0
 
     def gen_init_dividual(self):
         ind = Individual(
@@ -29,6 +32,7 @@ class Population:
         return ind
 
     def evolve_generations(self):
+        start_time = perf_counter()
         for _ in tqdm(range(Population.NUM_GENS)):
             self.run_generation()
         fitnesses = []
@@ -41,12 +45,28 @@ class Population:
                 best_individual = individual
                 best_fitness = curr_fitness
         print(f"in sample perf: {best_fitness}")
+        best_individual.cum_profit.plot(color="blue", legend=False)
+        plt.suptitle("In Sample Testing", y=1.05, fontsize=18)
+        plt.title(
+            f"Population Size: {Population.POPULATION_SIZE} | Number of Generations: {Population.NUM_GENS} | Training Time: {perf_counter() - start_time}",
+            fontsize=10,
+        )
+        plt.ylabel("Cumulative Log Return")
+        plt.show()
         return best_individual
 
     def perform_test(self, indv):
         self.set_out_of_sample(indv.root)
         indv.training = False
         perf = indv.evaluate_fitness()
+        indv.cum_profit.plot(color="green", legend=False)
+        plt.suptitle("In Sample Testing", y=1.05, fontsize=18)
+        plt.title(
+            f"Population Size: {Population.POPULATION_SIZE} | Number of Generations: {Population.NUM_GENS}",
+            fontsize=10,
+        )
+        plt.ylabel("Cumulative Log Return")
+        plt.show()
         print(f"out of sample perf: {perf}")
 
     def set_out_of_sample(self, curr_node):
@@ -202,8 +222,8 @@ class Population:
         fragment1 = self.copy_tree(node1)
         fragment2 = self.copy_tree(node2)
 
-        root1 = self.copy_tree_until(parent1.root, idx1, fragment1)
-        root2 = self.copy_tree_until(parent2.root, idx2, fragment2)
+        root1 = self.copy_tree_until(parent1.root, idx1, fragment2)
+        root2 = self.copy_tree_until(parent2.root, idx2, fragment1)
 
         child1 = Individual(
             Population.NUM_SECTORS, sector_weights1, root1, stock_weights1
@@ -233,7 +253,7 @@ class Population:
         boolean_choices = BooleanNode.types.copy()
         boolean_choices.remove(BooleanNode.NOT)
         type_of_node = random.choice(boolean_choices)
-        start_level = random.randint(2, 8)
+        start_level = random.randint(2, 6)
         left = self.create_node(start_level, individual.BOOLEAN_NODE, type_of_node)
         right = self.create_node(start_level, individual.BOOLEAN_NODE, type_of_node)
         root = BooleanNode(type_of_node, left, right)
