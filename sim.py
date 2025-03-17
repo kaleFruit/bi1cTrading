@@ -11,7 +11,7 @@ import random
 
 class Population:
     POPULATION_SIZE = 4  # even number cuase lazy parent strategy
-    NUM_GENS = 2
+    NUM_GENS = 1
     NUM_SECTORS = 3
 
     def __init__(self):
