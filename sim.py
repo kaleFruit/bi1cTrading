@@ -11,7 +11,7 @@ import random
 
 class Population:
     POPULATION_SIZE = 4  # even number cuase lazy parent strategy
-    NUM_GENS = 3
+    NUM_GENS = 2
     NUM_SECTORS = 3
 
     def __init__(self):
@@ -28,7 +28,7 @@ class Population:
         )
         return ind
 
-    def do_the_sim(self):
+    def evolve_generations(self):
         for _ in tqdm(range(Population.NUM_GENS)):
             self.run_generation()
         fitnesses = []
@@ -40,7 +40,22 @@ class Population:
             if best_individual == None or curr_fitness > best_fitness:
                 best_individual = individual
                 best_fitness = curr_fitness
-        print(best_fitness)
+        print(f"in sample perf: {best_fitness}")
+        return best_individual
+
+    def perform_test(self, indv):
+        self.set_out_of_sample(indv.root)
+        perf = indv.evaluate_fitness()
+        print(f"out of sample perf: {perf}")
+
+    def set_out_of_sample(self, curr_node):
+        if isinstance(curr_node, EndNode):
+            curr_node.training = False
+        else:
+            if curr_node.left != None:
+                self.set_out_of_sample(curr_node.left)
+            if curr_node.right != None and not isinstance(curr_node.right, float):
+                self.set_out_of_sample(curr_node.right)
 
     def run_generation(self):
         fitnesses = []
@@ -55,27 +70,25 @@ class Population:
         fitnesses = np.array(fitnesses)
         p = fitnesses / fitnesses.sum()
         p = p.tolist()
-        curr_population = [i for i in range(len(self.population))]
+        p_dict = {i: p[i] for i in range(len(p))}
         next_population = []
         for _ in range(0, Population.POPULATION_SIZE, 2):
             index1 = choice(
-                curr_population,
-                p=p,
+                list(p_dict.keys()),
+                p=list(p_dict.values()),
             )
-            curr_population.remove(index1)
-            p.pop(index1)
-            total = sum(p)
-            p = [i / total for i in p]
+            del p_dict[index1]
+            total = sum(p_dict.values())
+            p_dict = {pair[0]: pair[1] / total for pair in p_dict.items()}
             parent1 = self.population[index1]
 
             index2 = choice(
-                curr_population,
-                p=p,
+                list(p_dict.keys()),
+                p=list(p_dict.values()),
             )
-            curr_population.remove(index2)
-            p.pop(index2)
-            total = sum(p)
-            p = [i / total for i in p]
+            del p_dict[index2]
+            total = sum(p_dict.values())
+            p_dict = {pair[0]: pair[1] / total for pair in p_dict.items()}
             parent2 = self.population[index2]
 
             child1, child2 = self.crossover(parent1, parent2)
@@ -97,6 +110,7 @@ class Population:
         p_sum = sum(child.stock_weights.values())
         for stock in child.stock_weights.keys():
             child.stock_weights[stock] /= p_sum
+        return child
 
         # randomize tree stuff later
 
@@ -135,31 +149,52 @@ class Population:
     def select_node(self, curr_node, n):
         if n == 0:
             return curr_node
+        if (
+            curr_node == None
+            or isinstance(curr_node, EndNode)
+            or isinstance(curr_node, float)
+        ):
+            return None
         else:
-            self.select_node(curr_node.left, n - 1)
-            self.select_node(curr_node.right, n - 2)
+            temp1 = self.select_node(curr_node.left, n - 1)
+            temp2 = self.select_node(curr_node.right, n - 2)
+            return temp1 or temp2
 
     def crossover(self, parent1, parent2):
         # sector weights
         idx = random.randint(0, len(process_stocks.sectors))
-        sector_weights1 = parent1.sector_weights[:idx]
-        sector_weights2 = parent2.sector_weights[idx:]
+        sector_weights1 = (
+            parent1.sector_weights[:idx].tolist()
+            + parent2.sector_weights[idx:].tolist()
+        )
+        sector_weights1 = np.array(sector_weights1)
+        sector_weights1 /= sector_weights1.sum()
+
+        sector_weights2 = (
+            parent2.sector_weights[:idx].tolist()
+            + parent1.sector_weights[idx:].tolist()
+        )
+        sector_weights2 = np.array(sector_weights2)
+        sector_weights2 /= sector_weights2.sum()
 
         # stock weights
         idx = random.randint(0, len(process_stocks.tickers))
         stock_weights1 = dict(list(parent1.stock_weights.items())[:idx])
+        stock_weights1.update(dict(list(parent2.stock_weights.items())[idx:]))
+
         stock_weights2 = dict(list(parent2.stock_weights.items())[:idx])
+        stock_weights2.update(dict(list(parent1.stock_weights.items())[idx:]))
 
         # tree
         node1 = None
         idx1 = 0
-        while not isinstance(node1, BooleanNode):
+        while not isinstance(node1, BooleanNode) or node1.operation == BooleanNode.NOT:
             idx1 = random.randint(0, parent1.tree_size)
             node1 = self.select_node(parent1.root, idx1)
 
         node2 = None
         idx2 = 0
-        while not isinstance(node2, BooleanNode):
+        while not isinstance(node2, BooleanNode) or node2.operation == BooleanNode.NOT:
             idx2 = random.randint(0, parent2.tree_size)
             node2 = self.select_node(parent2.root, idx2)
 
@@ -197,7 +232,7 @@ class Population:
         boolean_choices = BooleanNode.types.copy()
         boolean_choices.remove(BooleanNode.NOT)
         type_of_node = random.choice(boolean_choices)
-        start_level = random.randint(2, 10)
+        start_level = random.randint(2, 8)
         left = self.create_node(start_level, individual.BOOLEAN_NODE, type_of_node)
         right = self.create_node(start_level, individual.BOOLEAN_NODE, type_of_node)
         root = BooleanNode(type_of_node, left, right)
@@ -296,4 +331,5 @@ class Population:
 
 if __name__ == "__main__":
     pop = Population()
-    test = pop.do_the_sim()
+    best_individual = pop.evolve_generations()
+    pop.perform_test(best_individual)

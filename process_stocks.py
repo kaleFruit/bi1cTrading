@@ -21,7 +21,8 @@ tickers_per_sector = {
 
 LARGEST_WINDOW_SIZE = 100
 MAX_DATE = 300
-LENGTH = totalData.loc[totalData["Ticker"] == "AAPL"].shape[0]
+TRAINING_LENGTH = totalData.loc[totalData["Ticker"] == "AAPL"].shape[0] - MAX_DATE
+TEST_LENGTH = MAX_DATE
 
 
 def find_sharpe_ratio(ref: pd.DataFrame) -> float:

@@ -18,11 +18,15 @@ class Individual:
             replace=False,
         )
         self.stock_weights = stock_weights
+        self.chosen_stocks = None
         self.profit = 0
         self.root = root
         self.fitness = 0
         self.tree_size = 0
         self.find_tree_size(self.root)
+
+    def __repr__(self) -> str:
+        return f"size: {self.tree_size} | sectors: {self.chosen_sectors}"
 
     def find_tree_size(self, curr_node):
         self.tree_size += 1
@@ -53,7 +57,10 @@ class Individual:
         return stocks_list
 
     def evaluate_fitness(self):
-        stocks = self.pick_stocks()
+        stocks = self.chosen_stocks
+        if stocks is None:
+            stocks = self.pick_stocks()
+            self.chosen_stocks = stocks
         stock_perfs = []
         for stock in stocks:
             stock_perf = self.evaluate_return(stock)
@@ -145,26 +152,49 @@ class EndNode:
     def __init__(self, window_size, type_of_node):
         self.window_size = window_size
         self.type_of_node = type_of_node
+        self.training = True
 
     def evaluate(self, ticker: str):
         if self.type_of_node == EndNode.TRUE or self.type_of_node == EndNode.FALSE:
             if self.type_of_node == EndNode.TRUE:
-                data = pd.DataFrame(np.full(process_stocks.LENGTH, True))
+                if self.training:
+                    data = pd.DataFrame(np.full(process_stocks.TRAINING_LENGTH, True))
+                else:
+                    data = pd.DataFrame(np.full(process_stocks.TEST_LENGTH, True))
             else:
-                data = pd.DataFrame(np.full(process_stocks.LENGTH, False))
+                if self.training:
+                    data = pd.DataFrame(np.full(process_stocks.TRAINING_LENGTH, False))
+                else:
+                    data = pd.DataFrame(np.full(process_stocks.TEST_LENGTH, False))
             data.reset_index(inplace=True, drop=True)
             data.columns = ["vals"]
             return data
 
         if self.window_size != 1:
+            if self.training:
+                data = process_stocks.totalData.loc[
+                    process_stocks.totalData["Ticker"] == ticker
+                ][[self.type_of_node]][: -process_stocks.MAX_DATE].rolling(
+                    self.window_size
+                )
+                data.columns = ["vals"]
+                return data
+            else:
+                data = process_stocks.totalData.loc[
+                    process_stocks.totalData["Ticker"] == ticker
+                ][[self.type_of_node]][-process_stocks.MAX_DATE :].rolling(
+                    self.window_size
+                )
+                data.columns = ["vals"]
+                return data
+        if self.training:
             data = process_stocks.totalData.loc[
                 process_stocks.totalData["Ticker"] == ticker
-            ][[self.type_of_node]].rolling(self.window_size)
-            data.columns = ["vals"]
-            return data
-        data = process_stocks.totalData.loc[
-            process_stocks.totalData["Ticker"] == ticker
-        ][[self.type_of_node]]
+            ][[self.type_of_node]][: -process_stocks.MAX_DATE]
+        else:
+            data = process_stocks.totalData.loc[
+                process_stocks.totalData["Ticker"] == ticker
+            ][[self.type_of_node]][-process_stocks.MAX_DATE :]
         data.columns = ["vals"]
         return data
 
