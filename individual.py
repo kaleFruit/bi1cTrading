@@ -1,9 +1,9 @@
 import numpy as np
 from numpy.random import choice
-from pandas.core import window
-from pandas.core.arrays import BooleanArray
 import process_stocks
 from tqdm import tqdm
+import pandas as pd
+import random
 
 
 class Individual:
@@ -29,6 +29,7 @@ class Individual:
                 if best_stock is None or stock_perf > best_stock_perf:
                     best_stock = stock
                     best_stock_perf = stock_perf
+            print(f"best stock: {best_stock} | perf: {best_stock_perf}")
 
     def evaluate_return(self, ticker):
         daily_returns = (
@@ -99,20 +100,35 @@ class EndNode:
     OPEN = "Open"
     HIGH = "High"
     LOW = "Low"
+    TRUE = 1
+    FALSE = 2
     types = [CLOSE, OPEN, HIGH, LOW]
 
-    def __init__(self, window_size, type):
+    def __init__(self, window_size, type_of_node):
         self.window_size = window_size
-        self.type = type
+        self.type_of_node = type_of_node
 
     def evaluate(self, ticker: str):
+        if self.type_of_node == EndNode.TRUE or self.type_of_node == EndNode.FALSE:
+            if self.type_of_node == EndNode.TRUE:
+                data = pd.DataFrame(np.full(process_stocks.LENGTH, True))
+            else:
+                data = pd.DataFrame(np.full(process_stocks.LENGTH, False))
+            data.reset_index(inplace=True, drop=True)
+            data.columns = ["vals"]
+            return data
+
         if self.window_size != 1:
-            return process_stocks.totalData.loc[
+            data = process_stocks.totalData.loc[
                 process_stocks.totalData["Ticker"] == ticker
-            ][[self.type]].rolling(self.window_size)
-        return process_stocks.totalData.loc[
+            ][[self.type_of_node]].rolling(self.window_size)
+            data.columns = ["vals"]
+            return data
+        data = process_stocks.totalData.loc[
             process_stocks.totalData["Ticker"] == ticker
-        ][[self.type]].values
+        ][[self.type_of_node]]
+        data.columns = ["vals"]
+        return data
 
 
 class EvaluationNode:
@@ -138,27 +154,46 @@ class EvaluationNode:
         self.operation = operation
         self.left = left
         self.right = right
+        self.window_size = 2
 
     def evaluate(self, ticker: str):
         left = self.left.evaluate(ticker)
+        if (
+            self.operation == EvaluationNode.MAX
+            or self.operation == EvaluationNode.MIN
+            or self.operation == EvaluationNode.AVERAGE
+        ):
+            if isinstance(left, pd.api.typing.Rolling):
+                rolled_left = left
+            else:
+                rolled_left = left.rolling(self.window_size)
+            if self.operation == EvaluationNode.MAX:
+                data = rolled_left.max()
+            elif self.operation == EvaluationNode.MIN:
+                data = rolled_left.min()
+            else:
+                data = rolled_left.mean()
+            data.reset_index(drop=True, inplace=True)
+            data.columns = ["vals"]
+            return data
 
-        if self.operation == EvaluationNode.MAX:
-            return left.max()
-        elif self.operation == EvaluationNode.MIN:
-            return left.min()
-        elif self.operation == EvaluationNode.AVERAGE:
-            return left.mean()
-
-        if self.right != None:
+        if self.right != None and self.operation != EvaluationNode.SCALE:
             right = self.right.evaluate(ticker)
+            left.reset_index(drop=True, inplace=True)
+            right.reset_index(drop=True, inplace=True)
             if self.operation == EvaluationNode.ADD:
                 return left + right
-            elif self.operation == EvaluationNode.SCALE:
-                return left * right
             elif self.operation == EvaluationNode.LESS_THAN:
-                return np.where(left < right, 1, 0)
+                data = pd.DataFrame(np.where(left < right, 1, 0).flatten())
+                data.columns = ["vals"]
+                return data
             elif self.operation == EvaluationNode.GREATER_THAN:
-                return np.where(left > right, 1, 0)
+                data = pd.DataFrame(np.where(left > right, 1, 0).flatten())
+                data.columns = ["vals"]
+                return data
+        elif self.right != None and self.operation == EvaluationNode.SCALE:
+            left.reset_index(drop=True, inplace=True)
+            return left * self.right
 
 
 if __name__ == "__main__":
