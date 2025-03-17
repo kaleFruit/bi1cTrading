@@ -45,6 +45,7 @@ class Population:
 
     def perform_test(self, indv):
         self.set_out_of_sample(indv.root)
+        indv.training = False
         perf = indv.evaluate_fitness()
         print(f"out of sample perf: {perf}")
 

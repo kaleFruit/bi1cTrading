@@ -24,6 +24,7 @@ class Individual:
         self.fitness = 0
         self.tree_size = 0
         self.find_tree_size(self.root)
+        self.training = True
 
     def __repr__(self) -> str:
         return f"size: {self.tree_size} | sectors: {self.chosen_sectors}"
@@ -75,19 +76,30 @@ class Individual:
         return fitness
 
     def evaluate_return(self, ticker):
-        daily_returns = (
-            np.log(
-                process_stocks.totalData.loc[
-                    process_stocks.totalData["Ticker"] == ticker
-                ][["Close"]]
-            )
-            .diff()
-            .shift(-1)
-            .values
-        )[process_stocks.LARGEST_WINDOW_SIZE : process_stocks.MAX_DATE]
-        signals = self.get_signal(ticker)[
-            process_stocks.LARGEST_WINDOW_SIZE : process_stocks.MAX_DATE
-        ]
+        if self.training:
+            daily_returns = (
+                np.log(
+                    process_stocks.totalData.loc[
+                        process_stocks.totalData["Ticker"] == ticker
+                    ][["Close"]]
+                )
+                .diff()
+                .shift(-1)
+                .values
+            )[process_stocks.LARGEST_WINDOW_SIZE : -process_stocks.MAX_DATE]
+            signals = self.get_signal(ticker)[process_stocks.LARGEST_WINDOW_SIZE :]
+        else:
+            daily_returns = (
+                np.log(
+                    process_stocks.totalData.loc[
+                        process_stocks.totalData["Ticker"] == ticker
+                    ][["Close"]]
+                )
+                .diff()
+                .shift(-1)
+                .values
+            )[-process_stocks.MAX_DATE :]
+            signals = self.get_signal(ticker)
         strategy_returns = np.multiply(signals, daily_returns)
         if np.absolute(strategy_returns[strategy_returns < 0]).sum() == 0:
             return 100
